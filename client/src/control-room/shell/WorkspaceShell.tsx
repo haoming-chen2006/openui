@@ -20,7 +20,7 @@ import { TOOLS_SECTIONS, TOOLS_SECTION_LABEL } from "./contract";
 import type { PageDescriptor, ToolsSection, WorkspacePageProps } from "./contract";
 import { NotMergedYet } from "./NotMergedYet";
 import { SlotBoundary } from "./SlotBoundary";
-import { PAGES, TOOLS_PANEL } from "./pages";
+import { PAGES, TOOLS_PANEL, useVisiblePages } from "./pages";
 import { INSPECTOR, NAVIGATOR, RAIL, layout, useRegion } from "./regions";
 import { useWorkspaceRoute } from "./router";
 import { useTheme } from "./theme";
@@ -212,8 +212,11 @@ function PageStrip({
   toolsOpen: boolean;
   onTools: () => void;
 }) {
-  const headline = PAGES.filter((p) => p.rank === "headline");
-  const secondary = PAGES.filter((p) => p.rank === "secondary");
+  // Through `useVisiblePages`, not `PAGES`: an optional page that this workspace has not
+  // configured is absent from the navigation rather than shown disabled (XAP-008).
+  const visible = useVisiblePages();
+  const headline = visible.filter((p) => p.rank === "headline");
+  const secondary = visible.filter((p) => p.rank === "secondary");
 
   const tab = (page: PageDescriptor) => {
     const isActive = page.id === active;
@@ -578,7 +581,11 @@ export function WorkspaceShell() {
   }, [openTools]);
 
   const widths = layout(available, navigator, inspector);
-  const page = PAGES.find((p) => p.id === route.page) ?? PAGES[0];
+  // Resolved against the VISIBLE pages, so a deep link to a page this workspace has not configured
+  // lands on the first page rather than rendering a surface XAP-008 says does not exist here. The
+  // fallback stays `PAGES[0]`, which is always visible — a filter can never empty this list.
+  const visiblePages = useVisiblePages();
+  const page = visiblePages.find((p) => p.id === route.page) ?? PAGES[0];
   const project = data.activeProject;
 
   // projectId is never empty: a workspace with no project gets the shell's own state, not a page

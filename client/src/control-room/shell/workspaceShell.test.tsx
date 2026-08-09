@@ -5,6 +5,10 @@ import { PAGES } from "./pages";
 import { navigate } from "./router";
 import { Notifications, WorkspaceShell } from "./WorkspaceShell";
 import { NAVIGATOR } from "./regions";
+// Through the barrel, never `../users/x/...`: SHELL-017 forbids the shell reaching into a page
+// module's interior, and a test file in this directory is subject to the same rule as the shell.
+import { setXConfiguredForTest } from "../users";
+import { NotMergedYet } from "./NotMergedYet";
 
 const PROJECT = { id: "proj_1", name: "Aeris Chairs — Q3 sales push" };
 
@@ -59,8 +63,15 @@ beforeEach(() => {
   localStorage.clear();
   atUrl("/designdocs");
   stubServer();
+  // 08-users-x stage 14: the X row is the one page whose presence is a runtime fact rather than a
+  // merge fact (XAP-008). These tests are about the five-page shell, so they state that this
+  // workspace has an X application; the case where it does not has its own test below.
+  setXConfiguredForTest(true);
 });
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  setXConfiguredForTest(null);
+});
 
 describe("the three regions", () => {
   test("navigator, main and inspector render on every page", async () => {
@@ -93,14 +104,31 @@ describe("the three regions", () => {
     // reason one merge later. What this test is actually about is the shell's OWN fallback content,
     // so it now mounts a page that supplies no inspector and asserts there. When every page supplies
     // one, `bare` is undefined and the test says so rather than passing vacuously.
+    // Stage 14 made `bare` undefined — X supplied the last missing inspector — and the paragraph
+    // above anticipated it. So the runtime path runs while a page still lacks one, and the source
+    // assertion below covers the fallback once none does. The rule being guarded never changed:
+    // the shell's own inspector content is prose, and prose does not navigate.
     const bare = PAGES.find((p) => !p.inspector);
-    expect(bare, "every page now supplies an inspector; this test has nothing left to guard").toBeDefined();
-    cleanup();
-    atUrl(workspaceUrl(bare!.id));
-    await mount();
-    const inspector = screen.getByTestId("inspector");
-    expect(inspector.querySelectorAll("button").length).toBe(0);
-    expect(inspector.querySelectorAll("a").length).toBe(0);
+    if (bare) {
+      cleanup();
+      atUrl(workspaceUrl(bare.id));
+      await mount();
+      const inspector = screen.getByTestId("inspector");
+      expect(inspector.querySelectorAll("button").length).toBe(0);
+      expect(inspector.querySelectorAll("a").length).toBe(0);
+      return;
+    }
+
+    const { readFileSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const src = readFileSync(join(import.meta.dir, "WorkspaceShell.tsx"), "utf8");
+    const start = src.indexOf("{page.inspector ? (");
+    expect(start).toBeGreaterThan(-1);
+    const fallback = src.slice(start, src.indexOf("</aside>", start));
+    expect(fallback).toContain("Properties of whatever is selected in the middle");
+    expect(fallback).not.toContain("<button");
+    expect(fallback).not.toContain("onClick");
+    expect(fallback).not.toContain("<a ");
   });
 
   test("a side region collapses on a double-click and its width survives a remount", async () => {
@@ -163,6 +191,28 @@ describe("the page strip names the places", () => {
       "",
       "tools-open",
     ]);
+  });
+
+  test("a workspace with no X application has no X tab — not a disabled one (XAP-008)", async () => {
+    setXConfiguredForTest(false);
+    await mount();
+    const order = [...screen.getByTestId("page-selector").children].map(
+      (el) => el.getAttribute("data-testid") ?? "",
+    );
+    // Absent, not greyed and not tooltipped. The four other pages are untouched, so this is the
+    // optional page being optional rather than the strip failing to render.
+    expect(order).not.toContain("page-x");
+    expect(order).toContain("page-users");
+    expect(screen.queryByTestId("page-x")).toBeNull();
+  });
+
+  test("a deep link to X in that workspace lands somewhere real, not on a page that is absent", async () => {
+    setXConfiguredForTest(false);
+    atUrl(workspaceUrl("x"));
+    await mount();
+    // The first page, which is always visible. Rendering the X surface for a URL the navigation
+    // does not offer would be the same violation reached by typing instead of clicking.
+    expect(screen.getByTestId("page-agents").getAttribute("aria-current")).toBe("page");
   });
 
   test("the strip is chrome, above the regions and outside the navigator", async () => {
@@ -244,8 +294,24 @@ describe("an unmerged page is stated, never faked", () => {
     // "an UNMERGED page is stated, never faked", and once a page merges there is nothing left to
     // state about it. Iterating all five made the test assert that nothing had merged, which was
     // true on 07-shell's branch and is a fact about the calendar rather than about the shell.
+    //
+    // Stage 14 emptied this list — X was the last hole and the registry now has five `main`s — so
+    // the loop below runs zero times and the guard that demanded at least one hole is gone. What
+    // replaces it is the direct assertion underneath: the component still has to say the right
+    // thing, or deleting it would leave nothing to notice.
     const unmerged = PAGES.filter((p) => !p.main);
-    expect(unmerged.length).toBeGreaterThan(0);
+    expect(unmerged.length).toBe(0);
+
+    cleanup();
+    render(<NotMergedYet what="The Example page" branch="09-example" />);
+    const stated = screen.getByTestId("not-merged-yet");
+    expect(stated.textContent).toContain("Nothing is mounted here yet");
+    expect(stated.textContent).toContain("The Example page");
+    expect(stated.textContent).toContain("09-example");
+    // Provenance, never a merge status — 06-tools-cost had merged while this notice still claimed
+    // otherwise, which is how the old wording was caught.
+    expect(stated.textContent).not.toContain("has not merged yet");
+    cleanup();
 
     for (const page of unmerged) {
       atUrl(workspaceUrl(page.id));
