@@ -24,23 +24,44 @@
  * named components is what keeps it to one line: the row keeps its id, label, segment and rank,
  * which are 07-shell's to decide, and gains only the components, which are this loop's.
  *
- * ### What is not here yet
+ * ### The X page, stage 14 — built
  *
- * `XPage`. §8 lists it in this file's contract and it is stage 14 — the last stage of the loop,
- * behind nine others and behind credentials that do not exist on this machine (`X_CLIENT_ID`,
- * `X_CLIENT_SECRET`). §3.15 also requires that the X page be **absent** rather than disabled when
- * there are no credentials, so an export that rendered a placeholder would be the wrong thing to
- * have written. The `x` row in `pages.ts` therefore stays unmounted and the shell says the branch
- * that builds it has not merged, which is true.
+ * It was the outstanding hole in this contract and it is now `X_PAGE_SLOTS`, spread into the `x`
+ * row the same way. Two things about it that are not true of the users row:
+ *
+ *   - **the credentials it was blocked on turned out to exist.** The loop recorded `X_CLIENT_ID` /
+ *     `X_CLIENT_SECRET` as absent, and they are — but `credentialsFromEnv()` wants OAuth 1.0a user
+ *     tokens (`consumer_key`, `consumer_secret`, `x_access_token`, `x_access_secret`) and this
+ *     machine's `.env` has all four. Nothing was mocked to unblock this.
+ *   - **its row is conditional.** XAP-008 says an unconfigured X page is absent from the navigation
+ *     rather than disabled, so `pages.ts` filters it on `useXConfigured()`, which starts false and
+ *     is revealed only once the server confirms. That is the one page in the registry whose
+ *     presence is a runtime fact rather than a merge fact.
  */
 import type { PageDescriptor } from "../shell/contract";
 import { UsersPageInspector } from "./UserInspector";
 import { UsersPageNavigator } from "./UsersNavigator";
 import { UsersPageMain } from "./UsersPage";
+import { XPageInspector } from "./x/XInspector";
+import { XPageNavigator } from "./x/XNavigator";
+import { XPageMain } from "./x/XPage";
 
 export { UsersPageMain as UsersPage } from "./UsersPage";
 export { UsersPageNavigator } from "./UsersNavigator";
 export { UsersPageInspector } from "./UserInspector";
+
+export { XPageMain as XPage } from "./x/XPage";
+export { XPageNavigator } from "./x/XNavigator";
+export { XPageInspector } from "./x/XInspector";
+
+/**
+ * Whether the X page exists at all. `pages.ts` filters its row on this — XAP-008.
+ *
+ * `setXConfiguredForTest` is exported alongside it for the same reason the hook is: SHELL-017
+ * forbids the shell reaching into `../users/<anything>/`, and the shell's own tests need to state
+ * which kind of workspace they are describing. One entry point, for the product and for its tests.
+ */
+export { useXConfigured, setXConfiguredForTest } from "./x/availability";
 
 export type { CapabilityGrant, Role, WorkspaceUser } from "./types";
 
@@ -49,4 +70,11 @@ export const USERS_PAGE_SLOTS: Pick<PageDescriptor, "main" | "navigator" | "insp
   main: UsersPageMain,
   navigator: UsersPageNavigator,
   inspector: UsersPageInspector,
+};
+
+/** The same three, for the `x` row. Its presence is conditional; its contents are not. */
+export const X_PAGE_SLOTS: Pick<PageDescriptor, "main" | "navigator" | "inspector"> = {
+  main: XPageMain,
+  navigator: XPageNavigator,
+  inspector: XPageInspector,
 };

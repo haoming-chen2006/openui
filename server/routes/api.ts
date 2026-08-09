@@ -12,6 +12,7 @@ import { agentRoutes } from "./agents";
 import { libraryRoutes } from "./library";
 import { assetRoutes } from "./assets";
 import { designDocRoutes } from "./designDocs";
+import { xRoutes } from "./x";
 import { spawnSync } from "bun";
 import { join, dirname } from "path";
 import { homedir } from "os";
@@ -38,6 +39,11 @@ apiRoutes.route("/assets", assetRoutes);
 
 // 03-design-docs. Read-only today; see the header of routes/designDocs.ts.
 apiRoutes.route("/design-docs", designDocRoutes);
+
+// 08-users-x stage 14. The X page's surface over services/x, which stages 9–13 built and nothing
+// called. `GET /api/x/status` answers without credentials, because XAP-008 keys the page's very
+// existence on it.
+apiRoutes.route("/x", xRoutes);
 
 const IS_REMOTE = !!process.env.SSH_CONNECTION;
 
